@@ -43,7 +43,7 @@ export default function HomePage() {
             {
               title: 'AI-Powered Audits',
               description:
-                'Get a comprehensive SEO audit powered by Claude AI. Analyse meta tags, headings, images, performance, accessibility, and more.',
+                'Get a comprehensive SEO audit powered by AI. Analyse meta tags, headings, images, performance, accessibility, and more.',
               icon: '🔍',
             },
             {
