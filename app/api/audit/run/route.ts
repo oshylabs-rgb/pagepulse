@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { analyseSEO } from '@/lib/claude'
+import { analyseSEO } from '@/lib/gemini'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -81,7 +81,7 @@ async function runAuditAsync(auditId: string, url: string, supabase: Awaited<Ret
       headers[key] = value
     })
 
-    // Analyse with Claude
+    // Analyse with Gemini
     const analysis = await analyseSEO(url, html, headers)
 
     // Update the audit record
