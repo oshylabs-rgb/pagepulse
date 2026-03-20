@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 
-export default function LoginPage() {
+function LoginForm() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -86,5 +86,23 @@ export default function LoginPage() {
         </Link>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm animate-pulse">
+        <div className="h-8 w-48 bg-gray-200 rounded" />
+        <div className="mt-4 h-4 w-64 bg-gray-100 rounded" />
+        <div className="mt-8 space-y-4">
+          <div className="h-10 bg-gray-100 rounded-lg" />
+          <div className="h-10 bg-gray-100 rounded-lg" />
+          <div className="h-10 bg-indigo-100 rounded-lg" />
+        </div>
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   )
 }
