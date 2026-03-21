@@ -23,12 +23,17 @@ export default function RunAuditButton({
         body: JSON.stringify({ site_id: siteId, url: siteUrl }),
       })
 
+      const data = await res.json()
+
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || 'Failed to start audit')
+        throw new Error(data.error || 'Failed to run audit')
       }
 
-      toast.success('Audit started — this may take a minute.')
+      if (data.status === 'completed') {
+        toast.success(`Audit complete — score: ${data.overall_score}/100`)
+      } else {
+        toast.success('Audit complete.')
+      }
       router.refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Something went wrong')
@@ -43,7 +48,7 @@ export default function RunAuditButton({
       disabled={loading}
       className="rounded-lg bg-indigo-600 px-6 py-2 font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
     >
-      {loading ? 'Starting...' : 'Run Audit'}
+      {loading ? 'Analysing...' : 'Run Audit'}
     </button>
   )
 }

@@ -8,6 +8,9 @@ export async function GET(request: Request) {
   const type = searchParams.get('type') as EmailOtpType | null
   const next = searchParams.get('next') ?? '/dashboard'
 
+  // Also handle the code-based flow (some Supabase email templates use code instead of token_hash)
+  const code = searchParams.get('code')
+
   if (token_hash && type) {
     const supabase = await createClient()
     const { error } = await supabase.auth.verifyOtp({ token_hash, type })
@@ -15,6 +18,15 @@ export async function GET(request: Request) {
     if (!error) {
       return NextResponse.redirect(`${origin}${next}`)
     }
+    console.error('Email verification error:', error.message)
+  } else if (code) {
+    const supabase = await createClient()
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+    if (!error) {
+      return NextResponse.redirect(`${origin}${next}`)
+    }
+    console.error('Code exchange error:', error.message)
   }
 
   return NextResponse.redirect(`${origin}/login?error=verification_failed`)

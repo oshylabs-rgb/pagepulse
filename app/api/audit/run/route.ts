@@ -2,6 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { analyseSEO } from '@/lib/gemini'
 import { NextResponse } from 'next/server'
 
+// Allow up to 60 seconds for audit to complete (Gemini can take a while)
+export const maxDuration = 60
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -53,57 +56,70 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
     }
 
-    // Run the audit in the background (fire and forget)
-    runAuditAsync(audit.id, url, supabase)
+    // Run the audit synchronously — Vercel serverless functions terminate
+    // after the response is sent, so we must complete the work first
+    try {
+      // Fetch the webpage
+      const pageResponse = await fetch(url, {
+        headers: {
+          'User-Agent': 'PagePulse SEO Auditor/1.0',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(15000), // 15s timeout for page fetch
+      })
 
-    return NextResponse.json({
-      audit_id: audit.id,
-      status: 'running',
-    })
+      if (!pageResponse.ok) {
+        throw new Error(`Failed to fetch page: ${pageResponse.status} ${pageResponse.statusText}`)
+      }
+
+      const html = await pageResponse.text()
+      const headers: Record<string, string> = {}
+      pageResponse.headers.forEach((value, key) => {
+        headers[key] = value
+      })
+
+      // Analyse with Gemini
+      const analysis = await analyseSEO(url, html, headers)
+
+      // Update the audit record with results
+      await supabase
+        .from('audits')
+        .update({
+          status: 'completed',
+          overall_score: analysis.overall_score,
+          performance_score: analysis.performance_score,
+          seo_score: analysis.seo_score,
+          accessibility_score: analysis.accessibility_score,
+          best_practices_score: analysis.best_practices_score,
+          issues: analysis.issues,
+          recommendations: analysis.recommendations,
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', audit.id)
+
+      return NextResponse.json({
+        audit_id: audit.id,
+        status: 'completed',
+        overall_score: analysis.overall_score,
+      })
+    } catch (analysisError) {
+      console.error('Audit analysis error:', analysisError)
+      await supabase
+        .from('audits')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+        })
+        .eq('id', audit.id)
+
+      return NextResponse.json({
+        audit_id: audit.id,
+        status: 'failed',
+        error: analysisError instanceof Error ? analysisError.message : 'Analysis failed',
+      }, { status: 500 })
+    }
   } catch (error) {
     console.error('Audit run error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-async function runAuditAsync(auditId: string, url: string, supabase: Awaited<ReturnType<typeof createClient>>) {
-  try {
-    // Fetch the webpage
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'PagePulse SEO Auditor/1.0',
-      },
-    })
-
-    const html = await response.text()
-    const headers: Record<string, string> = {}
-    response.headers.forEach((value, key) => {
-      headers[key] = value
-    })
-
-    // Analyse with Gemini
-    const analysis = await analyseSEO(url, html, headers)
-
-    // Update the audit record
-    await supabase
-      .from('audits')
-      .update({
-        status: 'completed',
-        overall_score: analysis.overall_score,
-        performance_score: analysis.performance_score,
-        seo_score: analysis.seo_score,
-        accessibility_score: analysis.accessibility_score,
-        best_practices_score: analysis.best_practices_score,
-        issues: analysis.issues,
-        recommendations: analysis.recommendations,
-        completed_at: new Date().toISOString(),
-      })
-      .eq('id', auditId)
-  } catch (error) {
-    console.error('Audit analysis error:', error)
-    await supabase
-      .from('audits')
-      .update({ status: 'failed' })
-      .eq('id', auditId)
   }
 }

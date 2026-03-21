@@ -59,6 +59,9 @@ const seoAnalysisSchema = {
 }
 
 export async function analyseSEO(url: string, htmlContent: string, headers: Record<string, string>): Promise<SEOAnalysis> {
+  // Truncate HTML to avoid exceeding token limits
+  const truncatedHtml = htmlContent.substring(0, 30000)
+
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: `You are an expert SEO auditor. Analyse this webpage and return a comprehensive SEO audit.
@@ -68,8 +71,8 @@ URL: ${url}
 HTTP Headers:
 ${JSON.stringify(headers, null, 2)}
 
-HTML Content (first 50000 chars):
-${htmlContent.substring(0, 50000)}
+HTML Content:
+${truncatedHtml}
 
 Analyse: meta tags, headings hierarchy, image alt text, canonical URLs, structured data, mobile responsiveness signals, page speed indicators, link structure, accessibility attributes, security headers, and content quality signals.
 
@@ -80,5 +83,10 @@ For each category score (0-100), be rigorous and specific. Identify real issues 
     },
   })
 
-  return JSON.parse(response.text!) as SEOAnalysis
+  const text = response.text
+  if (!text) {
+    throw new Error('Gemini returned an empty response')
+  }
+
+  return JSON.parse(text) as SEOAnalysis
 }
