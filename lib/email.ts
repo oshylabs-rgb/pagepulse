@@ -9,7 +9,7 @@ function getResend() {
 }
 
 function getFromEmail() {
-  return process.env.EMAIL_FROM || 'PagePulse <onboarding@resend.dev>'
+  return process.env.EMAIL_FROM || 'PagePulse <noreply@pagepulse.se>'
 }
 
 function confirmationEmailHtml(confirmUrl: string): string {
