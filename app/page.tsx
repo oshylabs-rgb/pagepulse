@@ -38,7 +38,7 @@ export default function HomePage() {
         <h2 className="text-center text-3xl font-bold">
           Everything You Need to Rank Higher
         </h2>
-        <div className="mt-16 grid gap-8 md:grid-cols-3">
+        <div className="mt-16 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
           {[
             {
               title: 'AI-Powered Audits',
@@ -47,10 +47,28 @@ export default function HomePage() {
               icon: '🔍',
             },
             {
-              title: 'Score Tracking',
+              title: 'Code Fix Snippets',
               description:
-                'Monitor your SEO scores over time. See trends, catch regressions early, and measure the impact of your improvements.',
+                'Every issue comes with a real, copy-pasteable code fix. Not generic advice — actual before/after code you can apply immediately.',
+              icon: '🛠️',
+            },
+            {
+              title: 'Signal Tracking',
+              description:
+                'Know which organic signals are sticking. Track keywords, meta tags, headings, and content signals across every audit.',
+              icon: '📡',
+            },
+            {
+              title: 'Score Trajectory',
+              description:
+                'See how your SEO, performance, and accessibility scores change over time with visual trajectory charts.',
               icon: '📈',
+            },
+            {
+              title: 'Keyword Detection',
+              description:
+                'Discover which keywords your pages naturally target. Track keyword occurrences across audits to find what resonates.',
+              icon: '🔑',
             },
             {
               title: 'Smart Alerts',
