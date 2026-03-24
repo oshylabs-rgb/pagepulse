@@ -16,6 +16,11 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.verifyOtp({ token_hash, type })
 
     if (!error) {
+      // For signup confirmations, redirect to login with success message
+      // (user needs to sign in after confirming their email)
+      if (type === 'signup' || type === 'email') {
+        return NextResponse.redirect(`${origin}/login?verified=true`)
+      }
       return NextResponse.redirect(`${origin}${next}`)
     }
     console.error('Email verification error:', error.message)

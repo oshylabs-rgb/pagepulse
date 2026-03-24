@@ -13,6 +13,8 @@ function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirectTo') || '/dashboard'
+  const error = searchParams.get('error')
+  const verified = searchParams.get('verified')
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -33,6 +35,16 @@ function LoginForm() {
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+      {verified === 'true' && (
+        <div className="mb-4 rounded-lg bg-green-50 border border-green-200 p-3 text-sm text-green-700">
+          Email verified successfully. Sign in to continue.
+        </div>
+      )}
+      {error === 'verification_failed' && (
+        <div className="mb-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+          Email verification failed or the link has expired. Please try signing up again or request a new confirmation email.
+        </div>
+      )}
       <h1 className="text-2xl font-bold">Sign in to PagePulse</h1>
       <p className="mt-2 text-sm text-gray-500">
         Monitor your SEO health with AI-powered audits.
