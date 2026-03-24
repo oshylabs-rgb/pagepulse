@@ -82,23 +82,45 @@ export async function POST(request: Request) {
       // Analyse with Gemini (now returns code fixes, keywords, and signals)
       const analysis = await analyseSEO(url, html, headers)
 
-      // Update the audit record with results (including new fields)
-      await supabase
+      // Update the audit record with results
+      // Try with new fields first, fall back to original fields if columns don't exist yet
+      const updateData: Record<string, unknown> = {
+        status: 'completed',
+        overall_score: analysis.overall_score,
+        performance_score: analysis.performance_score,
+        seo_score: analysis.seo_score,
+        accessibility_score: analysis.accessibility_score,
+        best_practices_score: analysis.best_practices_score,
+        issues: analysis.issues,
+        recommendations: analysis.recommendations,
+        keywords_detected: analysis.keywords_detected || [],
+        signals: analysis.signals || [],
+        completed_at: new Date().toISOString(),
+      }
+
+      const { error: updateError } = await supabase
         .from('audits')
-        .update({
-          status: 'completed',
-          overall_score: analysis.overall_score,
-          performance_score: analysis.performance_score,
-          seo_score: analysis.seo_score,
-          accessibility_score: analysis.accessibility_score,
-          best_practices_score: analysis.best_practices_score,
-          issues: analysis.issues,
-          recommendations: analysis.recommendations,
-          keywords_detected: analysis.keywords_detected || [],
-          signals: analysis.signals || [],
-          completed_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('id', audit.id)
+
+      // If update fails (new columns don't exist yet), retry without them
+      if (updateError && updateError.message?.includes('column')) {
+        console.warn('New columns not yet created, saving without keywords/signals:', updateError.message)
+        await supabase
+          .from('audits')
+          .update({
+            status: 'completed',
+            overall_score: analysis.overall_score,
+            performance_score: analysis.performance_score,
+            seo_score: analysis.seo_score,
+            accessibility_score: analysis.accessibility_score,
+            best_practices_score: analysis.best_practices_score,
+            issues: analysis.issues,
+            recommendations: analysis.recommendations,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', audit.id)
+      }
 
       // Save tracking data using service role (bypasses RLS)
       const serviceSupabase = createServiceClient(
