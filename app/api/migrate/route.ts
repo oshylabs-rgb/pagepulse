@@ -23,9 +23,14 @@ export async function POST(request: Request) {
     
     // Use Supabase's direct connection via the pooler
     // Connection format: postgres://postgres.{ref}:{service_role_key}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
-    const connectionString = `postgresql://postgres.${ref}:${serviceKey}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require`
+    const connectionString = `postgresql://postgres.${ref}:${serviceKey}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres`
 
-    const pool = new Pool({ connectionString, max: 1, idleTimeoutMillis: 10000 })
+    const pool = new Pool({
+      connectionString,
+      max: 1,
+      idleTimeoutMillis: 10000,
+      ssl: { rejectUnauthorized: false },
+    })
     
     const results: { step: string; ok: boolean; error?: string }[] = []
 
