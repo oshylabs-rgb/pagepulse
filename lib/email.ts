@@ -9,7 +9,9 @@ function getResend() {
 }
 
 function getFromEmail() {
-  return process.env.EMAIL_FROM || 'PagePulse <noreply@pagepulse.se>'
+  // Use custom domain if EMAIL_FROM is set, otherwise fall back to Resend's shared domain
+  // Once pagepulse.se is verified in Resend, set EMAIL_FROM=PagePulse <noreply@pagepulse.se>
+  return process.env.EMAIL_FROM || 'PagePulse <onboarding@resend.dev>'
 }
 
 function confirmationEmailHtml(confirmUrl: string): string {
