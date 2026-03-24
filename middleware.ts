@@ -48,6 +48,11 @@ export async function middleware(request: NextRequest) {
       request.nextUrl.pathname.startsWith('/auth/')
   )
 
+  // Allow public API auth routes (signup, resend-confirmation)
+  if (request.nextUrl.pathname.startsWith('/api/auth/')) {
+    return supabaseResponse
+  }
+
 
   // Redirect unauthenticated users away from protected routes
   if (!user && !isPublicRoute) {
