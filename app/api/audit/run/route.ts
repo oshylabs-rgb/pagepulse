@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { analyseSEO } from '@/lib/gemini'
 import { NextResponse } from 'next/server'
+import { createClient as createServiceClient } from '@supabase/supabase-js'
 
 // Allow up to 60 seconds for audit to complete (Gemini can take a while)
 export const maxDuration = 60
@@ -78,10 +79,10 @@ export async function POST(request: Request) {
         headers[key] = value
       })
 
-      // Analyse with Gemini
+      // Analyse with Gemini (now returns code fixes, keywords, and signals)
       const analysis = await analyseSEO(url, html, headers)
 
-      // Update the audit record with results
+      // Update the audit record with results (including new fields)
       await supabase
         .from('audits')
         .update({
@@ -93,9 +94,90 @@ export async function POST(request: Request) {
           best_practices_score: analysis.best_practices_score,
           issues: analysis.issues,
           recommendations: analysis.recommendations,
+          keywords_detected: analysis.keywords_detected || [],
+          signals: analysis.signals || [],
           completed_at: new Date().toISOString(),
         })
         .eq('id', audit.id)
+
+      // Save tracking data using service role (bypasses RLS)
+      const serviceSupabase = createServiceClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      )
+
+      // Save score history
+      try {
+        await serviceSupabase.from('score_history').insert({
+          site_id,
+          user_id: user.id,
+          audit_id: audit.id,
+          overall_score: analysis.overall_score,
+          seo_score: analysis.seo_score,
+          performance_score: analysis.performance_score,
+          accessibility_score: analysis.accessibility_score,
+          best_practices_score: analysis.best_practices_score,
+        })
+      } catch (e) {
+        console.warn('Could not save score history (table may not exist yet):', e)
+      }
+
+      // Save keyword signals (upsert — increment occurrences if keyword already exists)
+      if (analysis.keywords_detected && analysis.keywords_detected.length > 0) {
+        try {
+          for (const keyword of analysis.keywords_detected.slice(0, 30)) {
+            const kw = keyword.toLowerCase().trim()
+            // Check if keyword already exists for this site
+            const { data: existing } = await serviceSupabase
+              .from('keyword_signals')
+              .select('id, occurrences')
+              .eq('site_id', site_id)
+              .eq('keyword', kw)
+              .single()
+
+            if (existing) {
+              // Update: increment occurrences and update last_seen
+              await serviceSupabase
+                .from('keyword_signals')
+                .update({
+                  occurrences: (existing.occurrences || 1) + 1,
+                  last_seen_at: new Date().toISOString(),
+                })
+                .eq('id', existing.id)
+            } else {
+              // Insert new keyword
+              await serviceSupabase.from('keyword_signals').insert({
+                site_id,
+                user_id: user.id,
+                keyword: kw,
+                source: 'audit',
+                category: 'organic',
+                occurrences: 1,
+              })
+            }
+          }
+        } catch (e) {
+          console.warn('Could not save keyword signals:', e)
+        }
+      }
+
+      // Save page signals
+      if (analysis.signals && analysis.signals.length > 0) {
+        try {
+          const signalRows = analysis.signals.map((signal) => ({
+            site_id,
+            user_id: user.id,
+            audit_id: audit.id,
+            signal_type: signal.signal_type,
+            signal_value: signal.signal_value.substring(0, 500),
+            status: signal.status,
+            context: signal.context,
+          }))
+          await serviceSupabase.from('page_signals').insert(signalRows)
+        } catch (e) {
+          console.warn('Could not save page signals:', e)
+        }
+      }
 
       return NextResponse.json({
         audit_id: audit.id,

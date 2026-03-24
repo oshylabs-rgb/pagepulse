@@ -9,6 +9,32 @@ export interface Site {
   updated_at: string
 }
 
+export interface CodeFix {
+  language: string
+  filename: string
+  before: string
+  after: string
+  explanation: string
+}
+
+export interface AuditIssue {
+  id: string
+  category: 'seo' | 'performance' | 'accessibility' | 'best-practices'
+  severity: 'critical' | 'warning' | 'info'
+  title: string
+  description: string
+  element?: string
+  suggestion: string
+  code_fix?: CodeFix
+}
+
+export interface AuditSignal {
+  signal_type: string
+  signal_value: string
+  status: 'good' | 'needs_improvement' | 'missing'
+  context: string
+}
+
 export interface Audit {
   id: string
   site_id: string
@@ -21,19 +47,50 @@ export interface Audit {
   best_practices_score: number | null
   issues: AuditIssue[]
   recommendations: string[]
+  keywords_detected: string[] | null
+  signals: AuditSignal[] | null
   raw_data: Record<string, unknown> | null
   created_at: string
   completed_at: string | null
 }
 
-export interface AuditIssue {
+export interface KeywordSignal {
   id: string
-  category: 'seo' | 'performance' | 'accessibility' | 'best-practices'
-  severity: 'critical' | 'warning' | 'info'
-  title: string
-  description: string
-  element?: string
-  suggestion: string
+  site_id: string
+  user_id: string
+  keyword: string
+  source: string
+  category: string
+  first_seen_at: string
+  last_seen_at: string
+  occurrences: number
+  trend: 'rising' | 'stable' | 'declining'
+  created_at: string
+}
+
+export interface ScoreHistory {
+  id: string
+  site_id: string
+  user_id: string
+  audit_id: string
+  overall_score: number | null
+  seo_score: number | null
+  performance_score: number | null
+  accessibility_score: number | null
+  best_practices_score: number | null
+  recorded_at: string
+}
+
+export interface PageSignal {
+  id: string
+  site_id: string
+  user_id: string
+  audit_id: string
+  signal_type: string
+  signal_value: string
+  status: string
+  context: string | null
+  created_at: string
 }
 
 export interface MonitoringAlert {

@@ -2,6 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import RunAuditButton from '@/components/audit/RunAuditButton'
+import ScoreTrajectory from '@/components/tracking/ScoreTrajectory'
+import KeywordSignals from '@/components/tracking/KeywordSignals'
+import SignalOverview from '@/components/tracking/SignalOverview'
 
 export default async function SitePage({
   params,
@@ -37,6 +40,17 @@ export default async function SitePage({
           <p className="text-sm text-gray-500">{site.url}</p>
         </div>
         <RunAuditButton siteId={site.id} siteUrl={site.url} />
+      </div>
+
+      {/* Score Trajectory Chart */}
+      <div className="mt-8">
+        <ScoreTrajectory siteId={site.id} />
+      </div>
+
+      {/* Tracking Grid */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <KeywordSignals siteId={site.id} />
+        <SignalOverview siteId={site.id} />
       </div>
 
       {/* Audit history */}
