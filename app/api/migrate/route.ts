@@ -12,26 +12,49 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Build connection string from Supabase URL
-    // Supabase DB connection: postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
-    // But we can also use the direct connection via the service role key
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    // Try multiple connection methods
+    const connectionStrings = [
+      process.env.DATABASE_URL,
+      process.env.POSTGRES_URL,
+      process.env.POSTGRES_URL_NON_POOLING,
+      process.env.SUPABASE_DB_URL,
+    ].filter(Boolean)
 
-    // Extract project ref from URL
-    const ref = new URL(supabaseUrl).hostname.split('.')[0]
-    
-    // Use Supabase's direct connection via the pooler
-    // Connection format: postgres://postgres.{ref}:{service_role_key}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres
-    const connectionString = `postgresql://postgres.${ref}:${serviceKey}@aws-0-eu-central-1.pooler.supabase.com:6543/postgres`
+    if (connectionStrings.length === 0) {
+      return NextResponse.json({
+        error: 'No database connection string found. Set DATABASE_URL env var in Vercel.',
+        hint: 'Go to Supabase Dashboard > Project Settings > Database > Connection String (URI) and add it as DATABASE_URL in Vercel env vars.',
+        envChecked: ['DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_URL_NON_POOLING', 'SUPABASE_DB_URL'],
+      }, { status: 500 })
+    }
 
-    const pool = new Pool({
-      connectionString,
-      max: 1,
-      idleTimeoutMillis: 10000,
-      ssl: { rejectUnauthorized: false },
-    })
-    
+    let pool: Pool | null = null
+    let connectedWith = ''
+
+    for (const cs of connectionStrings) {
+      try {
+        const testPool = new Pool({
+          connectionString: cs,
+          max: 1,
+          connectionTimeoutMillis: 10000,
+          ssl: { rejectUnauthorized: false },
+        })
+        await testPool.query('SELECT 1')
+        pool = testPool
+        connectedWith = cs!.substring(0, 30) + '...'
+        break
+      } catch {
+        continue
+      }
+    }
+
+    if (!pool) {
+      return NextResponse.json({
+        error: 'Could not connect with any available connection string',
+        triedCount: connectionStrings.length,
+      }, { status: 500 })
+    }
+
     const results: { step: string; ok: boolean; error?: string }[] = []
 
     const statements: { label: string; sql: string }[] = [
@@ -117,7 +140,6 @@ export async function POST(request: Request) {
         label: 'Enable RLS on page_signals',
         sql: `ALTER TABLE page_signals ENABLE ROW LEVEL SECURITY`,
       },
-      // RLS policies
       {
         label: 'RLS policies for keyword_signals',
         sql: `DO $$ BEGIN
@@ -157,7 +179,6 @@ export async function POST(request: Request) {
           END IF;
         END $$`,
       },
-      // Service role bypass policies (so the API routes can write with service_role key)
       {
         label: 'Service role bypass for keyword_signals',
         sql: `DO $$ BEGIN
@@ -210,6 +231,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       status: failed === 0 ? 'success' : 'partial',
+      connectedWith,
       succeeded,
       failed,
       total: results.length,
