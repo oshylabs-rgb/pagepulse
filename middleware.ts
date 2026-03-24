@@ -48,6 +48,11 @@ export async function middleware(request: NextRequest) {
       request.nextUrl.pathname.startsWith('/auth/')
   )
 
+  // Allow temporary migration endpoint (remove after migration)
+  if (request.nextUrl.pathname === '/api/migrate') {
+    return supabaseResponse
+  }
+
   // Redirect unauthenticated users away from protected routes
   if (!user && !isPublicRoute) {
     const redirectUrl = request.nextUrl.clone()
