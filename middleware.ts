@@ -1,7 +1,36 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// Public routes that never need a Supabase auth check
+const PUBLIC_ROUTES = new Set([
+  '/',
+  '/login',
+  '/signup',
+  '/auth/confirm',
+  '/auth/reset-password',
+  '/pricing',
+  '/privacy',
+  '/terms',
+  '/cookies',
+])
+
+function isPublicRoute(pathname: string): boolean {
+  return (
+    PUBLIC_ROUTES.has(pathname) ||
+    pathname.startsWith('/auth/') ||
+    pathname.startsWith('/api/auth/')
+  )
+}
+
 export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+
+  // Skip Supabase call entirely for public routes — no auth needed
+  if (isPublicRoute(pathname)) {
+    return NextResponse.next({ request })
+  }
+
+  // For protected routes, create the Supabase client and check auth
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -25,55 +54,35 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
-  // Public routes that don't need authentication
-  const publicRoutes = [
-    '/',
-    '/login',
-    '/signup',
-    '/auth/confirm',
-    '/auth/reset-password',
-    '/pricing',
-    '/privacy',
-    '/terms',
-    '/cookies',
-  ]
+    // Redirect unauthenticated users to login
+    if (!user) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/login'
+      redirectUrl.searchParams.set('redirectTo', pathname)
+      return NextResponse.redirect(redirectUrl)
+    }
 
-  const isPublicRoute = publicRoutes.some(
-    route =>
-      request.nextUrl.pathname === route ||
-      request.nextUrl.pathname.startsWith('/auth/')
-  )
+    // Redirect authenticated users away from auth pages
+    if (
+      user &&
+      (pathname === '/login' || pathname === '/signup')
+    ) {
+      const redirectUrl = request.nextUrl.clone()
+      redirectUrl.pathname = '/dashboard'
+      return NextResponse.redirect(redirectUrl)
+    }
 
-  // Allow public API auth routes (signup, resend-confirmation)
-  if (request.nextUrl.pathname.startsWith('/api/auth/')) {
     return supabaseResponse
+  } catch {
+    // If Supabase times out or errors, let the request through
+    // rather than crashing the entire site with a 504
+    return NextResponse.next({ request })
   }
-
-
-  // Redirect unauthenticated users away from protected routes
-  if (!user && !isPublicRoute) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/login'
-    redirectUrl.searchParams.set('redirectTo', request.nextUrl.pathname)
-    return NextResponse.redirect(redirectUrl)
-  }
-
-  // Redirect authenticated users away from auth pages
-  if (
-    user &&
-    (request.nextUrl.pathname === '/login' ||
-      request.nextUrl.pathname === '/signup')
-  ) {
-    const redirectUrl = request.nextUrl.clone()
-    redirectUrl.pathname = '/dashboard'
-    return NextResponse.redirect(redirectUrl)
-  }
-
-  return supabaseResponse
 }
 
 export const config = {
