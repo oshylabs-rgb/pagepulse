@@ -51,6 +51,12 @@ export default async function AuditDetailPage({
         })}
       </p>
 
+      {audit.ai_summary_status === 'fallback' && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          AI summary unavailable — this report was generated from technical checks only.
+        </div>
+      )}
+
       {/* Score cards */}
       <div className="mt-8 grid gap-4 sm:grid-cols-5">
         {scores.map((s) => (

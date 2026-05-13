@@ -99,6 +99,21 @@ CREATE POLICY "Users can view own alerts" ON monitoring_alerts FOR SELECT USING 
 CREATE POLICY "Users can update own alerts" ON monitoring_alerts FOR UPDATE USING (auth.uid() = user_id);
 ```
 
+### Optional columns (safe to add later)
+
+The audit endpoint persists these fields when they exist and silently
+falls back when they don't. Run this against existing databases to
+enable richer reports and the AI-fallback indicator:
+
+```sql
+ALTER TABLE audits
+  ADD COLUMN IF NOT EXISTS keywords_detected JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS signals JSONB DEFAULT '[]'::jsonb,
+  ADD COLUMN IF NOT EXISTS error_message TEXT,
+  ADD COLUMN IF NOT EXISTS ai_summary_status TEXT
+    CHECK (ai_summary_status IN ('ai', 'fallback'));
+```
+
 ## 4. Auth Configuration
 
 In Supabase Dashboard → Authentication → URL Configuration:
