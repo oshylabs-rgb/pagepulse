@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { analyseSEO } from '@/lib/gemini'
+import { analyseSEO, GeminiError, GeminiPermissionDeniedError } from '@/lib/gemini'
 import { NextResponse } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 
@@ -208,22 +208,54 @@ export async function POST(request: Request) {
       })
     } catch (analysisError) {
       console.error('Audit analysis error:', analysisError)
-      await supabase
+
+      // Mark the audit as failed and record the friendly error message so
+      // the dashboard can show it consistently across refresh.
+      const friendlyMessage =
+        analysisError instanceof GeminiPermissionDeniedError ||
+        analysisError instanceof GeminiError
+          ? analysisError.message
+          : 'Audit failed during analysis. Please try again.'
+
+      const failureUpdate: Record<string, unknown> = {
+        status: 'failed',
+        completed_at: new Date().toISOString(),
+      }
+      // Persist the error message if the column exists; ignore otherwise.
+      const { error: failUpdateError } = await supabase
         .from('audits')
-        .update({
-          status: 'failed',
-          completed_at: new Date().toISOString(),
-        })
+        .update({ ...failureUpdate, error_message: friendlyMessage })
         .eq('id', audit.id)
 
-      return NextResponse.json({
-        audit_id: audit.id,
-        status: 'failed',
-        error: analysisError instanceof Error ? analysisError.message : 'Analysis failed',
-      }, { status: 500 })
+      if (failUpdateError && failUpdateError.message?.includes('column')) {
+        await supabase.from('audits').update(failureUpdate).eq('id', audit.id)
+      }
+
+      const httpStatus =
+        analysisError instanceof GeminiPermissionDeniedError
+          ? 502
+          : analysisError instanceof GeminiError
+            ? analysisError.status >= 400 && analysisError.status < 600
+              ? analysisError.status === 403
+                ? 502
+                : analysisError.status
+              : 502
+            : 500
+
+      return NextResponse.json(
+        {
+          audit_id: audit.id,
+          status: 'failed',
+          error: friendlyMessage,
+        },
+        { status: httpStatus }
+      )
     }
   } catch (error) {
     console.error('Audit run error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Internal server error. Please try again.' },
+      { status: 500 }
+    )
   }
 }
