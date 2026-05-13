@@ -34,6 +34,19 @@ cp .env.example .env.local
 
 Fill in the values from Supabase, Stripe, Anthropic, and Resend dashboards.
 
+#### Email (Resend) — required for production
+
+Resend rejects email to any recipient other than the account owner's own
+address until you verify a sending domain. To enable signup confirmation
+emails in production:
+
+1. Verify your domain at [resend.com/domains](https://resend.com/domains).
+2. Set `EMAIL_FROM` to a sender on that verified domain, e.g.
+   `EMAIL_FROM=PagePulse <noreply@pagepulse.se>`.
+
+While `EMAIL_FROM` is unset the app falls back to `onboarding@resend.dev`,
+which is only suitable for local development.
+
 ### 4. Run Locally
 
 ```bash

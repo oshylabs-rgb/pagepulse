@@ -155,7 +155,7 @@ export async function POST(request: Request) {
               .select('id, occurrences')
               .eq('site_id', site_id)
               .eq('keyword', kw)
-              .single()
+              .maybeSingle()
 
             if (existing) {
               // Update: increment occurrences and update last_seen

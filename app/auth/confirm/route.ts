@@ -17,7 +17,9 @@ export async function GET(request: Request) {
 
     if (!error) {
       // For signup confirmations, redirect to login with success message
-      // (user needs to sign in after confirming their email)
+      // (user needs to sign in after confirming their email).
+      // Magic-link verifications confirm the email AND establish a session,
+      // so we can drop straight into the dashboard.
       if (type === 'signup' || type === 'email') {
         return NextResponse.redirect(`${origin}/login?verified=true`)
       }
