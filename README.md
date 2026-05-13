@@ -43,6 +43,11 @@ relevant:
 - `GEMINI_MODEL` (optional) — overrides the default model
   (`gemini-1.5-flash`). Useful when your key/project does not have
   access to the default model.
+- `AI_REPORTS_OPTIONAL` (optional, defaults to `true`) — when on, audits
+  fall back to a deterministic technical report if Gemini is unavailable
+  (quota exceeded, permission denied, missing model, timeout). The UI
+  shows a small notice that the AI summary was unavailable. Set to
+  `false` to force a hard failure on provider errors instead.
 
 Even with a valid `GEMINI_API_KEY`, a specific model can return
 `403 PERMISSION_DENIED` if your Google Cloud project does not have

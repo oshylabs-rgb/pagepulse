@@ -4,6 +4,14 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
+type RunAuditResponse = {
+  audit_id?: string
+  status?: string
+  overall_score?: number
+  ai_summary_status?: 'ai' | 'fallback'
+  error?: unknown
+}
+
 // Defensive: never display raw provider JSON in a toast. If `value` looks like
 // a JSON-shaped provider error, extract its `.error.message`; otherwise fall
 // back to a generic message.
@@ -52,9 +60,9 @@ export default function RunAuditButton({
         body: JSON.stringify({ site_id: siteId, url: siteUrl }),
       })
 
-      let data: { error?: unknown; status?: string; overall_score?: number } = {}
+      let data: RunAuditResponse = {}
       try {
-        data = await res.json()
+        data = (await res.json()) as RunAuditResponse
       } catch {
         // Non-JSON response (e.g. proxy timeout HTML) — leave data empty.
       }
@@ -64,7 +72,18 @@ export default function RunAuditButton({
       }
 
       if (data.status === 'completed') {
-        toast.success(`Audit complete — score: ${data.overall_score}/100`)
+        if (data.ai_summary_status === 'fallback') {
+          toast(
+            `Audit complete — score ${data.overall_score}/100. AI summary unavailable, generated from technical checks.`,
+            { icon: 'ℹ️', duration: 6000 }
+          )
+        } else {
+          toast.success(`Audit complete — score: ${data.overall_score}/100`)
+        }
+        if (data.audit_id) {
+          router.push(`/dashboard/site/${siteId}/audit/${data.audit_id}`)
+          return
+        }
       } else if (data.status === 'failed') {
         toast.error(extractErrorMessage(data.error) || 'Audit failed. Please try again.')
       } else {
