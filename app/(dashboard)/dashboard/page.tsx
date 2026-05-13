@@ -8,9 +8,11 @@ export default async function DashboardPage() {
 
   const { data: sites } = await supabase
     .from('sites')
-    .select('*, audits(id, overall_score, created_at)')
+    .select('*, audits(id, overall_score, created_at, status)')
     .eq('user_id', user!.id)
+    .eq('audits.status', 'completed')
     .order('created_at', { ascending: false })
+    .order('created_at', { foreignTable: 'audits', ascending: false })
 
   return (
     <div>
@@ -40,7 +42,7 @@ export default async function DashboardPage() {
               </h3>
               <p className="mt-1 truncate text-sm text-gray-500">{site.url}</p>
 
-              {latestAudit ? (
+              {latestAudit && latestAudit.overall_score !== null ? (
                 <div className="mt-4 flex items-center gap-3">
                   <span
                     className={`text-2xl font-bold ${

@@ -1,6 +1,21 @@
 import { Resend } from 'resend'
+import { RESEND_SANDBOX_FROM } from '@/lib/email'
 
-export const resend = new Resend(process.env.RESEND_API_KEY)
+let _resend: Resend | null = null
+function getResend() {
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY)
+  }
+  return _resend
+}
+
+function getFromEmail() {
+  return process.env.EMAIL_FROM || RESEND_SANDBOX_FROM
+}
+
+function getAlertsFromEmail() {
+  return process.env.EMAIL_ALERTS_FROM || getFromEmail()
+}
 
 export async function sendAuditCompleteEmail(
   to: string,
@@ -8,8 +23,8 @@ export async function sendAuditCompleteEmail(
   overallScore: number,
   auditUrl: string
 ) {
-  await resend.emails.send({
-    from: 'PagePulse <noreply@pagepulse.io>',
+  const { error } = await getResend().emails.send({
+    from: getFromEmail(),
     to,
     subject: `Audit Complete: ${siteName} scored ${overallScore}/100`,
     html: `
@@ -31,6 +46,10 @@ export async function sendAuditCompleteEmail(
       </div>
     `,
   })
+
+  if (error) {
+    console.error('Failed to send audit complete email:', error)
+  }
 }
 
 export async function sendAlertEmail(
@@ -39,8 +58,8 @@ export async function sendAlertEmail(
   alertType: string,
   message: string
 ) {
-  await resend.emails.send({
-    from: 'PagePulse Alerts <alerts@pagepulse.io>',
+  const { error } = await getResend().emails.send({
+    from: getAlertsFromEmail(),
     to,
     subject: `⚠️ Alert: ${siteName} — ${alertType}`,
     html: `
@@ -57,4 +76,16 @@ export async function sendAlertEmail(
       </div>
     `,
   })
+
+  if (error) {
+    console.error('Failed to send alert email:', error)
+  }
+}
+
+// Re-export for backwards compatibility with any code that imports `resend`.
+export const resend = {
+  emails: {
+    send: (...args: Parameters<Resend['emails']['send']>) =>
+      getResend().emails.send(...args),
+  },
 }

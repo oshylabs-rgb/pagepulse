@@ -1,6 +1,17 @@
 import { GoogleGenAI, Type } from '@google/genai'
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! })
+let _ai: GoogleGenAI | null = null
+function getAI(): GoogleGenAI {
+  if (!_ai) {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error(
+        'GEMINI_API_KEY is not configured. SEO analysis is unavailable.'
+      )
+    }
+    _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+  }
+  return _ai
+}
 
 export interface CodeFix {
   language: string
@@ -108,7 +119,7 @@ export async function analyseSEO(url: string, htmlContent: string, headers: Reco
   // Truncate HTML to avoid exceeding token limits
   const truncatedHtml = htmlContent.substring(0, 30000)
 
-  const response = await ai.models.generateContent({
+  const response = await getAI().models.generateContent({
     model: 'gemini-2.5-flash',
     contents: `You are an expert SEO auditor and web developer. Analyse this webpage and return a comprehensive SEO audit with ACTIONABLE CODE FIXES.
 

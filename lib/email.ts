@@ -3,15 +3,57 @@ import { Resend } from 'resend'
 let _resend: Resend | null = null
 function getResend() {
   if (!_resend) {
+    if (!process.env.RESEND_API_KEY) {
+      throw new EmailConfigError(
+        'RESEND_API_KEY is not configured. Set it in your environment to enable email sending.'
+      )
+    }
     _resend = new Resend(process.env.RESEND_API_KEY)
   }
   return _resend
 }
 
+// Resend's shared sandbox address. When this is the from-address, the Resend
+// API will only deliver to the account owner's verified email — every other
+// recipient gets a 403 with a "testing emails" message. We use this as a last
+// resort fallback so the app never crashes for missing config, but the signup
+// API treats this state as "email provider not production-ready" and returns
+// a clear operational error rather than a half-broken user record.
+export const RESEND_SANDBOX_FROM = 'PagePulse <onboarding@resend.dev>'
+
+export class EmailConfigError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'EmailConfigError'
+  }
+}
+
+export class EmailProviderRestrictedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'EmailProviderRestrictedError'
+  }
+}
+
 function getFromEmail() {
-  // Use custom domain if EMAIL_FROM is set, otherwise fall back to Resend's shared domain
-  // Once pagepulse.se is verified in Resend, set EMAIL_FROM=PagePulse <noreply@pagepulse.se>
-  return process.env.EMAIL_FROM || 'PagePulse <onboarding@resend.dev>'
+  // Prefer the operator-configured sender. Falls back to Resend's shared
+  // sandbox domain so dev/test envs work out of the box. Production must set
+  // EMAIL_FROM to a verified domain (e.g. "PagePulse <noreply@pagepulse.se>").
+  return process.env.EMAIL_FROM || RESEND_SANDBOX_FROM
+}
+
+export function isEmailProductionReady() {
+  return Boolean(process.env.RESEND_API_KEY) && Boolean(process.env.EMAIL_FROM)
+}
+
+function looksLikeResendRestriction(message: string | undefined): boolean {
+  if (!message) return false
+  const m = message.toLowerCase()
+  return (
+    m.includes('you can only send testing emails') ||
+    m.includes('verify a domain') ||
+    m.includes('testing emails to your own email')
+  )
 }
 
 function confirmationEmailHtml(confirmUrl: string): string {
@@ -92,6 +134,9 @@ export async function sendConfirmationEmail(email: string, confirmUrl: string) {
 
   if (error) {
     console.error('Failed to send confirmation email:', error)
+    if (looksLikeResendRestriction(error.message)) {
+      throw new EmailProviderRestrictedError(error.message)
+    }
     throw new Error(`Email send failed: ${error.message}`)
   }
 
@@ -108,6 +153,9 @@ export async function sendPasswordResetEmail(email: string, resetUrl: string) {
 
   if (error) {
     console.error('Failed to send reset email:', error)
+    if (looksLikeResendRestriction(error.message)) {
+      throw new EmailProviderRestrictedError(error.message)
+    }
     throw new Error(`Email send failed: ${error.message}`)
   }
 
