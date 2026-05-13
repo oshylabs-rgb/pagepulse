@@ -1,5 +1,14 @@
 import { GoogleGenAI, Type } from '@google/genai'
 
+// Default to a broadly available model. Override with GEMINI_MODEL env var.
+// Note: some models (e.g. gemini-2.5-flash) may return 403 PERMISSION_DENIED
+// for projects without explicit access, even with a valid API key.
+const DEFAULT_GEMINI_MODEL = 'gemini-1.5-flash'
+
+export function getGeminiModel(): string {
+  return process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL
+}
+
 let _ai: GoogleGenAI | null = null
 function getAI(): GoogleGenAI {
   if (!_ai) {
@@ -11,6 +20,76 @@ function getAI(): GoogleGenAI {
     _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
   }
   return _ai
+}
+
+export class GeminiPermissionDeniedError extends Error {
+  status = 403
+  constructor(public model: string, public providerMessage: string) {
+    super(
+      `AI provider denied access to model "${model}". This usually means the Gemini API key or its Google Cloud project does not have access to this model. Try setting GEMINI_MODEL to a model your project can use (e.g. gemini-1.5-flash), or check your API key restrictions.`
+    )
+    this.name = 'GeminiPermissionDeniedError'
+  }
+}
+
+export class GeminiError extends Error {
+  constructor(message: string, public status = 502) {
+    super(message)
+    this.name = 'GeminiError'
+  }
+}
+
+/**
+ * Normalises errors thrown by the @google/genai SDK into user-safe Error
+ * instances. The SDK frequently throws errors whose `.message` is the raw
+ * provider JSON (e.g. {"error":{"code":403,"message":"...","status":"PERMISSION_DENIED"}}),
+ * which must never be surfaced to the UI.
+ */
+function normaliseGeminiError(err: unknown, model: string): Error {
+  const raw = err instanceof Error ? err.message : String(err)
+
+  // Try to parse JSON-shaped provider errors.
+  // The SDK sometimes wraps the JSON in a prefix like "got status: 403 ..."
+  let parsed: { error?: { code?: number; status?: string; message?: string } } | null = null
+  const jsonMatch = raw.match(/\{[\s\S]*\}/)
+  if (jsonMatch) {
+    try {
+      parsed = JSON.parse(jsonMatch[0])
+    } catch {
+      parsed = null
+    }
+  }
+
+  const code = parsed?.error?.code
+  const status = parsed?.error?.status
+  const providerMessage = parsed?.error?.message || ''
+
+  if (code === 403 || status === 'PERMISSION_DENIED' || /PERMISSION_DENIED/i.test(raw)) {
+    return new GeminiPermissionDeniedError(model, providerMessage || raw)
+  }
+
+  if (code === 429 || status === 'RESOURCE_EXHAUSTED' || /quota/i.test(raw)) {
+    return new GeminiError(
+      'AI provider quota exceeded. Please try again later or check your Gemini API plan.',
+      429
+    )
+  }
+
+  if (code === 404 || status === 'NOT_FOUND') {
+    return new GeminiError(
+      `AI model "${model}" was not found. Set GEMINI_MODEL to a valid model name (e.g. gemini-1.5-flash).`,
+      404
+    )
+  }
+
+  if (code === 400 || status === 'INVALID_ARGUMENT') {
+    return new GeminiError(
+      'AI provider rejected the request as invalid. The page may be too large or malformed.',
+      400
+    )
+  }
+
+  return new GeminiError('AI analysis failed. Please try again in a few minutes.', 502)
 }
 
 export interface CodeFix {
@@ -118,10 +197,13 @@ const seoAnalysisSchema = {
 export async function analyseSEO(url: string, htmlContent: string, headers: Record<string, string>): Promise<SEOAnalysis> {
   // Truncate HTML to avoid exceeding token limits
   const truncatedHtml = htmlContent.substring(0, 30000)
+  const model = getGeminiModel()
 
-  const response = await getAI().models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: `You are an expert SEO auditor and web developer. Analyse this webpage and return a comprehensive SEO audit with ACTIONABLE CODE FIXES.
+  let response
+  try {
+    response = await getAI().models.generateContent({
+      model,
+      contents: `You are an expert SEO auditor and web developer. Analyse this webpage and return a comprehensive SEO audit with ACTIONABLE CODE FIXES.
 
 URL: ${url}
 
@@ -158,16 +240,25 @@ INSTRUCTIONS:
    - "signal_value": The actual value found (or "missing" if not present)
    - "status": "good", "needs_improvement", or "missing"
    - "context": Brief explanation of why this matters`,
-    config: {
-      responseMimeType: 'application/json',
-      responseSchema: seoAnalysisSchema,
-    },
-  })
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: seoAnalysisSchema,
+      },
+    })
+  } catch (err) {
+    // Log the raw error server-side for debugging, but throw a normalised one
+    console.error('Gemini SDK error:', err)
+    throw normaliseGeminiError(err, model)
+  }
 
   const text = response.text
   if (!text) {
-    throw new Error('Gemini returned an empty response')
+    throw new GeminiError('AI analysis returned an empty response. Please try again.', 502)
   }
 
-  return JSON.parse(text) as SEOAnalysis
+  try {
+    return JSON.parse(text) as SEOAnalysis
+  } catch {
+    throw new GeminiError('AI analysis returned an unparseable response. Please try again.', 502)
+  }
 }

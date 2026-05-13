@@ -34,6 +34,23 @@ cp .env.example .env.local
 
 Fill in the values from Supabase, Stripe, Anthropic, and Resend dashboards.
 
+#### AI provider (Google Gemini)
+
+PagePulse uses the Google Gemini API for SEO analysis. Two env vars are
+relevant:
+
+- `GEMINI_API_KEY` (required) — a valid Gemini API key.
+- `GEMINI_MODEL` (optional) — overrides the default model
+  (`gemini-1.5-flash`). Useful when your key/project does not have
+  access to the default model.
+
+Even with a valid `GEMINI_API_KEY`, a specific model can return
+`403 PERMISSION_DENIED` if your Google Cloud project does not have
+access to that model. If audits start failing with a permission-denied
+error, try setting `GEMINI_MODEL` to a model your project can use (for
+example `gemini-1.5-flash` or `gemini-1.5-pro`), or generate a new key
+in a project that has access to the desired model enabled.
+
 #### Email (Resend) — required for production
 
 Resend rejects email to any recipient other than the account owner's own
